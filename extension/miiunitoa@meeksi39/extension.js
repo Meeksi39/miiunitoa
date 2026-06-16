@@ -6,7 +6,7 @@ import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import Clutter from 'gi://Clutter';
 
-import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+import {Extension, gettext as _, ngettext} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as ModalDialog from 'resource:///org/gnome/shell/ui/modalDialog.js';
@@ -21,6 +21,13 @@ const DISPLAY_CONFIG_PATH = '/org/gnome/Mutter/DisplayConfig';
 const KEY_AUTO_SWITCH = 'auto-switch';
 const KEY_DEFAULT = 'default-layout';
 const KEY_CYCLE = 'cycle-layouts';
+
+// Minimal printf-style substitution (%s / %d) for translated strings, so
+// translators keep the placeholder and we don't depend on String.format.
+function fmt(str, ...args) {
+    let i = 0;
+    return str.replace(/%[sd]/g, () => String(args[i++]));
+}
 
 // Run the monitor-layout CLI; onDone(success, stdout, stderr).
 function runScript(argv, onDone) {
@@ -37,7 +44,7 @@ function runScript(argv, onDone) {
             }
         });
     } catch (e) {
-        Main.notify('ミーウニトア', `Failed to run switcher: ${e.message}`);
+        Main.notify('ミーウニトア', fmt(_('Failed to run switcher: %s'), e.message));
     }
 }
 
@@ -45,7 +52,7 @@ function runScript(argv, onDone) {
 function applyLayout(name) {
     runScript(['apply', name], (ok, _out, stderr) => {
         if (!ok)
-            Main.notify('ミーウニトア', `Could not apply "${name}".\n${stderr}`);
+            Main.notify('ミーウニトア', fmt(_('Could not apply "%s".'), name) + '\n' + stderr);
     });
 }
 
@@ -83,7 +90,8 @@ function layoutSummary(name) {
             for (const m of lm.monitors || [])
                 conns.push(m.connector);
         const n = conns.length;
-        return `${n} monitor${n === 1 ? '' : 's'} · ${conns.join(', ')}`;
+        const count = fmt(ngettext('%d monitor', '%d monitors', n), n);
+        return `${count} · ${conns.join(', ')}`;
     } catch (e) {
         return '';
     }
@@ -92,7 +100,7 @@ function layoutSummary(name) {
 // Small text-entry dialog used for "Save current layout…" and "Rename…".
 const NameDialog = GObject.registerClass(
 class NameDialog extends ModalDialog.ModalDialog {
-    _init(onSubmit, {label = 'Name for this layout:', initial = '', button = 'Save'} = {}) {
+    _init(onSubmit, {label = _('Name for this layout:'), initial = '', button = _('Save')} = {}) {
         super._init({destroyOnClose: true});
         this._onSubmit = onSubmit;
 
@@ -103,7 +111,7 @@ class NameDialog extends ModalDialog.ModalDialog {
         box.add_child(this._entry);
         this.contentLayout.add_child(box);
 
-        this.addButton({label: 'Cancel', key: Clutter.KEY_Escape,
+        this.addButton({label: _('Cancel'), key: Clutter.KEY_Escape,
             action: () => this.close()});
         this.addButton({label: button, default: true, action: () => this._submit()});
 
@@ -151,7 +159,7 @@ class Indicator extends PanelMenu.Button {
         const def = this._settings.get_string(KEY_DEFAULT);
 
         if (names.length === 0) {
-            const item = new PopupMenu.PopupMenuItem('No saved layouts');
+            const item = new PopupMenu.PopupMenuItem(_('No saved layouts'));
             item.setSensitive(false);
             this.menu.addMenuItem(item);
         } else {
@@ -164,18 +172,18 @@ class Indicator extends PanelMenu.Button {
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
         const autoSwitch = new PopupMenu.PopupSwitchMenuItem(
-            'Auto-switch on hotplug', this._settings.get_boolean(KEY_AUTO_SWITCH));
+            _('Auto-switch on hotplug'), this._settings.get_boolean(KEY_AUTO_SWITCH));
         autoSwitch.connect('toggled', (_item, state) =>
             this._settings.set_boolean(KEY_AUTO_SWITCH, state));
         this.menu.addMenuItem(autoSwitch);
 
-        const saveItem = new PopupMenu.PopupMenuItem('Save current layout…');
+        const saveItem = new PopupMenu.PopupMenuItem(_('Save current layout…'));
         saveItem.connect('activate', () => this._saveCurrent());
         this.menu.addMenuItem(saveItem);
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-        const settings = new PopupMenu.PopupMenuItem('Display Settings…');
+        const settings = new PopupMenu.PopupMenuItem(_('Display Settings…'));
         settings.connect('activate', () => {
             try {
                 Gio.Subprocess.new(
@@ -198,22 +206,22 @@ class Indicator extends PanelMenu.Button {
         sub.menu.addMenuItem(detail);
         sub.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-        const apply = new PopupMenu.PopupMenuItem('Apply');
+        const apply = new PopupMenu.PopupMenuItem(_('Apply'));
         apply.connect('activate', () => applyLayout(name));
         sub.menu.addMenuItem(apply);
 
-        const setDefault = new PopupMenu.PopupMenuItem('Set as default');
+        const setDefault = new PopupMenu.PopupMenuItem(_('Set as default'));
         setDefault.connect('activate', () => {
             this._settings.set_string(KEY_DEFAULT, name === def ? '' : name);
             this._rebuild();
         });
         sub.menu.addMenuItem(setDefault);
 
-        const rename = new PopupMenu.PopupMenuItem('Rename…');
+        const rename = new PopupMenu.PopupMenuItem(_('Rename…'));
         rename.connect('activate', () => this._renameLayout(name));
         sub.menu.addMenuItem(rename);
 
-        const del = new PopupMenu.PopupMenuItem('Delete');
+        const del = new PopupMenu.PopupMenuItem(_('Delete'));
         del.connect('activate', () => {
             runScript(['delete', name], () => this._rebuild());
         });
@@ -242,7 +250,7 @@ class Indicator extends PanelMenu.Button {
         const dialog = new NameDialog((name) => {
             runScript(['save', name], (ok, _out, stderr) => {
                 if (!ok)
-                    Main.notify('ミーウニトア', `Could not save "${name}".\n${stderr}`);
+                    Main.notify('ミーウニトア', fmt(_('Could not save "%s".'), name) + '\n' + stderr);
             });
         });
         dialog.open();
@@ -256,9 +264,9 @@ class Indicator extends PanelMenu.Button {
                 if (ok)
                     this._rebuild();
                 else
-                    Main.notify('ミーウニトア', `Could not rename "${name}".\n${stderr}`);
+                    Main.notify('ミーウニトア', fmt(_('Could not rename "%s".'), name) + '\n' + stderr);
             });
-        }, {label: `Rename "${name}" to:`, initial: name, button: 'Rename'});
+        }, {label: fmt(_('Rename "%s" to:'), name), initial: name, button: _('Rename')});
         dialog.open();
     }
 });
@@ -303,7 +311,7 @@ export default class MonitorLayoutExtension extends Extension {
     _cycle() {
         const names = layoutNames();
         if (names.length === 0) {
-            Main.notify('ミーウニトア', 'No saved layouts to cycle through.');
+            Main.notify('ミーウニトア', _('No saved layouts to cycle through.'));
             return;
         }
         this._cycleIndex = (this._cycleIndex + 1) % names.length;
@@ -334,7 +342,7 @@ export default class MonitorLayoutExtension extends Extension {
                 // ("already active") prints a different line and stays quiet.
                 const m = out.match(/Applied layout '(.+)'/);
                 if (m)
-                    Main.notify('ミーウニトア', `Applied "${m[1]}".`);
+                    Main.notify('ミーウニトア', fmt(_('Applied "%s".'), m[1]));
             } else if (stderr && !stderr.startsWith('No saved layout')) {
                 // Ambiguous match or real error — worth surfacing. A plain
                 // "no match" is normal on hotplug and stays silent.

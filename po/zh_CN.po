@@ -1,0 +1,93 @@
+# Simplified Chinese translation for ミーウニトア.
+# Copyright (C) 2026 Meeksi39
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: miiunitoa 3\n"
+"Report-Msgid-Bugs-To: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: extension.js
+msgid "Failed to run switcher: %s"
+msgstr "运行切换器失败：%s"
+
+#: extension.js
+msgid "Could not apply \"%s\"."
+msgstr "无法应用“%s”。"
+
+#: extension.js
+msgid "%d monitor"
+msgid_plural "%d monitors"
+msgstr[0] "%d 台显示器"
+
+#: extension.js
+msgid "Name for this layout:"
+msgstr "此布局的名称："
+
+#: extension.js
+msgid "Save"
+msgstr "保存"
+
+#: extension.js
+msgid "Cancel"
+msgstr "取消"
+
+#: extension.js
+msgid "Rename"
+msgstr "重命名"
+
+#: extension.js
+msgid "Rename \"%s\" to:"
+msgstr "将“%s”重命名为："
+
+#: extension.js
+msgid "No saved layouts"
+msgstr "没有已保存的布局"
+
+#: extension.js
+msgid "Auto-switch on hotplug"
+msgstr "热插拔时自动切换"
+
+#: extension.js
+msgid "Save current layout…"
+msgstr "保存当前布局…"
+
+#: extension.js
+msgid "Display Settings…"
+msgstr "显示设置…"
+
+#: extension.js
+msgid "Apply"
+msgstr "应用"
+
+#: extension.js
+msgid "Set as default"
+msgstr "设为默认"
+
+#: extension.js
+msgid "Rename…"
+msgstr "重命名…"
+
+#: extension.js
+msgid "Delete"
+msgstr "删除"
+
+#: extension.js
+msgid "Could not save \"%s\"."
+msgstr "无法保存“%s”。"
+
+#: extension.js
+msgid "Could not rename \"%s\"."
+msgstr "无法重命名“%s”。"
+
+#: extension.js
+msgid "No saved layouts to cycle through."
+msgstr "没有可循环切换的布局。"
+
+#: extension.js
+msgid "Applied \"%s\"."
+msgstr "已应用“%s”。"

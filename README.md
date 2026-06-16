@@ -137,6 +137,16 @@ dconf write /org/gnome/shell/extensions/miiunitoa/cycle-layouts "['<Super>F8']"
 複数あり既定もない場合は、何も適用されません（既定を設定して曖昧さを解消して
 ください）。これは `ml match` と同じロジックです。
 
+### 言語
+
+メニューと通知は **英語・日本語・中国語（簡体字）・韓国語** に翻訳されており、
+GNOME の表示言語に自動で追従します。翻訳は `po/*.po` にあり、`install.sh` が
+`msgfmt` で `locale/<言語>/LC_MESSAGES/miiunitoa.mo` にコンパイルします。
+
+言語を追加・更新するには、`po/miiunitoa.pot` を `po/<言語>.po` にコピー（または
+既存ファイルを編集）し、`msgstr` 行を埋めて `./install.sh` を再実行します。
+`%s` ／ `%d` のプレースホルダーはそのまま残してください。
+
 ## 仕組み
 
 - **保存（save）** では `org.gnome.Mutter.DisplayConfig` の `GetCurrentState` を

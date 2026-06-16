@@ -86,6 +86,18 @@ if command -v glib-compile-schemas >/dev/null && [[ -d "$EXT_DST/schemas" ]]; th
   echo "  compiled $EXT_DST/schemas/gschemas.compiled"
 fi
 
+# Compile translations: po/<lang>.po -> <ext>/locale/<lang>/LC_MESSAGES/miiunitoa.mo
+# GNOME loads these via the "gettext-domain" declared in metadata.json.
+if command -v msgfmt >/dev/null && compgen -G "$REPO/po/*.po" >/dev/null; then
+  for po in "$REPO"/po/*.po; do
+    lang="$(basename "$po" .po)"
+    mo_dir="$EXT_DST/locale/$lang/LC_MESSAGES"
+    mkdir -p "$mo_dir"
+    msgfmt "$po" -o "$mo_dir/miiunitoa.mo"
+    echo "  compiled $mo_dir/miiunitoa.mo"
+  done
+fi
+
 echo
 echo "Done."
 echo "Make sure ~/.local/bin is on your PATH, then:"

@@ -1,0 +1,95 @@
+# ミーウニトア — translation template.
+# Copyright (C) 2026 Meeksi39
+# This file is distributed under the same license as the miiunitoa extension.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: miiunitoa 3\n"
+"Report-Msgid-Bugs-To: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: extension.js
+msgid "Failed to run switcher: %s"
+msgstr ""
+
+#: extension.js
+msgid "Could not apply \"%s\"."
+msgstr ""
+
+#: extension.js
+msgid "%d monitor"
+msgid_plural "%d monitors"
+msgstr[0] ""
+msgstr[1] ""
+
+#: extension.js
+msgid "Name for this layout:"
+msgstr ""
+
+#: extension.js
+msgid "Save"
+msgstr ""
+
+#: extension.js
+msgid "Cancel"
+msgstr ""
+
+#: extension.js
+msgid "Rename"
+msgstr ""
+
+#: extension.js
+msgid "Rename \"%s\" to:"
+msgstr ""
+
+#: extension.js
+msgid "No saved layouts"
+msgstr ""
+
+#: extension.js
+msgid "Auto-switch on hotplug"
+msgstr ""
+
+#: extension.js
+msgid "Save current layout…"
+msgstr ""
+
+#: extension.js
+msgid "Display Settings…"
+msgstr ""
+
+#: extension.js
+msgid "Apply"
+msgstr ""
+
+#: extension.js
+msgid "Set as default"
+msgstr ""
+
+#: extension.js
+msgid "Rename…"
+msgstr ""
+
+#: extension.js
+msgid "Delete"
+msgstr ""
+
+#: extension.js
+msgid "Could not save \"%s\"."
+msgstr ""
+
+#: extension.js
+msgid "Could not rename \"%s\"."
+msgstr ""
+
+#: extension.js
+msgid "No saved layouts to cycle through."
+msgstr ""
+
+#: extension.js
+msgid "Applied \"%s\"."
+msgstr ""

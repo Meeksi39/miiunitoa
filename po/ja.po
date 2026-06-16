@@ -1,0 +1,93 @@
+# Japanese translation for ミーウニトア.
+# Copyright (C) 2026 Meeksi39
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: miiunitoa 3\n"
+"Report-Msgid-Bugs-To: \n"
+"Language: ja\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: extension.js
+msgid "Failed to run switcher: %s"
+msgstr "スイッチャーの実行に失敗しました: %s"
+
+#: extension.js
+msgid "Could not apply \"%s\"."
+msgstr "「%s」を適用できませんでした。"
+
+#: extension.js
+msgid "%d monitor"
+msgid_plural "%d monitors"
+msgstr[0] "モニター %d 台"
+
+#: extension.js
+msgid "Name for this layout:"
+msgstr "このレイアウトの名前:"
+
+#: extension.js
+msgid "Save"
+msgstr "保存"
+
+#: extension.js
+msgid "Cancel"
+msgstr "キャンセル"
+
+#: extension.js
+msgid "Rename"
+msgstr "名前を変更"
+
+#: extension.js
+msgid "Rename \"%s\" to:"
+msgstr "「%s」の新しい名前:"
+
+#: extension.js
+msgid "No saved layouts"
+msgstr "保存されたレイアウトはありません"
+
+#: extension.js
+msgid "Auto-switch on hotplug"
+msgstr "接続変更時に自動切り替え"
+
+#: extension.js
+msgid "Save current layout…"
+msgstr "現在のレイアウトを保存…"
+
+#: extension.js
+msgid "Display Settings…"
+msgstr "ディスプレイ設定…"
+
+#: extension.js
+msgid "Apply"
+msgstr "適用"
+
+#: extension.js
+msgid "Set as default"
+msgstr "デフォルトに設定"
+
+#: extension.js
+msgid "Rename…"
+msgstr "名前を変更…"
+
+#: extension.js
+msgid "Delete"
+msgstr "削除"
+
+#: extension.js
+msgid "Could not save \"%s\"."
+msgstr "「%s」を保存できませんでした。"
+
+#: extension.js
+msgid "Could not rename \"%s\"."
+msgstr "「%s」の名前を変更できませんでした。"
+
+#: extension.js
+msgid "No saved layouts to cycle through."
+msgstr "切り替えるレイアウトがありません。"
+
+#: extension.js
+msgid "Applied \"%s\"."
+msgstr "「%s」を適用しました。"

@@ -4,5 +4,6 @@
   "description": "Switch between saved monitor layouts from the top bar. Reads layouts saved with the 'monitor-layout' / 'ml' command (~/.config/monitor-layouts).",
   "shell-version": ["45", "46", "47", "48", "49", "50"],
   "settings-schema": "org.gnome.shell.extensions.miiunitoa",
-  "version": 2
+  "gettext-domain": "miiunitoa",
+  "version": 3
 }

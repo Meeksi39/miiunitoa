@@ -132,6 +132,17 @@ several layouts fit, the one set as **default** wins; otherwise the one using th
 most monitors wins. If two fit equally and there's no default, nothing is applied
 (set a default to break the tie). This is the same logic as `ml match`.
 
+### Languages
+
+The extension's menu and notifications are translated into **English, Japanese,
+Chinese (Simplified) and Korean**, and follow your GNOME display language
+automatically. Translations live in `po/*.po`; `install.sh` compiles them to
+`locale/<lang>/LC_MESSAGES/miiunitoa.mo` via `msgfmt`.
+
+To add or update a language, copy `po/miiunitoa.pot` to `po/<lang>.po` (or edit
+an existing file), fill in the `msgstr` lines, and re-run `./install.sh`. Keep
+the `%s` / `%d` placeholders intact.
+
 ## How it works
 
 - **Save** calls `GetCurrentState` on `org.gnome.Mutter.DisplayConfig`, then
