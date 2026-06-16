@@ -3,8 +3,8 @@
 *[日本語版 README はこちら](README.md)*
 
 Save and switch GNOME monitor layouts (positions, resolution/refresh, scale,
-rotation, primary display) — and switch between them from a top-bar menu or the
-command line.
+rotation, primary display) — from a top-bar menu, the command line, a keyboard
+shortcut, or automatically when you plug/unplug a monitor.
 
 It works on **GNOME Wayland**, where the usual tools (`xrandr`, `autorandr`,
 `wlr-randr`) don't, by talking directly to mutter's
@@ -35,6 +35,10 @@ cd ~/miiunitoa
 ./install.sh                # symlinks the CLI + extension into place
 gnome-extensions enable miiunitoa@meeksi39
 ```
+
+`install.sh` also compiles the extension's GSettings schema (used by the
+auto-switch toggle, default layout, and cycle keybinding). If you ever change
+the schema, re-run `./install.sh` and reload the shell.
 
 On Wayland you must **log out and back in** for GNOME Shell to load a newly
 installed extension (X11 can reload with `Alt+F2` → `r`).
@@ -90,15 +94,43 @@ From the command line:
 ml list             # show saved layouts with a summary of each
 ml apply work       # switch to the "work" layout
 ml current          # print the current layout (as it would be saved)
+ml rename fps game  # rename a saved layout
 ml delete fps       # remove a saved layout
+ml active           # print the saved layout matching the current config (if any)
+ml match            # print saved layouts usable with the connected monitors
+ml match --apply    # apply the best matching layout
 ```
 
-Or from the **top bar**: click the display icon and pick a layout. The
-"Display Settings…" entry opens GNOME's display panel. The menu rebuilds every
-time it opens, so layouts you save from the CLI appear without reloading the
-extension.
+Or from the **top bar**: click the display icon. Each layout expands to a
+submenu with **Apply**, **Set as default**, and **Delete**, and shows a one-line
+summary (monitor count + connectors). The layout matching your current config is
+marked with a checkmark; the default is marked with a ★. "Save current layout…"
+opens a dialog to name and snapshot the current setup, and "Display Settings…"
+opens GNOME's display panel. The menu rebuilds every time it opens, so layouts
+you save from the CLI appear without reloading the extension.
 
 (`ml` is just a short alias for `monitor-layout` — use either.)
+
+### Keyboard shortcut
+
+Press **`Super+P`** to cycle to the next saved layout (in name order). Re-bind it
+with dconf if you like:
+
+```sh
+dconf write /org/gnome/shell/extensions/miiunitoa/cycle-layouts "['<Super>F8']"
+```
+
+### Auto-switch on hotplug
+
+When **Auto-switch on hotplug** is enabled (toggle it in the menu; on by
+default), plugging or unplugging a monitor automatically applies the saved
+layout that fits the now-connected monitors, with a notification.
+
+A layout *fits* when every connector it uses is currently connected — so a
+"docked" layout that disables the laptop panel still fits while docked. When
+several layouts fit, the one set as **default** wins; otherwise the one using the
+most monitors wins. If two fit equally and there's no default, nothing is applied
+(set a default to break the tie). This is the same logic as `ml match`.
 
 ## How it works
 
