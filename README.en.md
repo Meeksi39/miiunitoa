@@ -10,6 +10,23 @@ It works on **GNOME Wayland**, where the usual tools (`xrandr`, `autorandr`,
 `wlr-randr`) don't, by talking directly to mutter's
 `org.gnome.Mutter.DisplayConfig` D-Bus interface.
 
+![Top-bar menu](docs/menu.png)
+
+## Motivation
+
+I was annoyed at having to switch my screens by hand every time I changed what I
+was doing — bumping a monitor to a higher refresh rate to get more FPS for
+gaming, flipping to a second-screen setup, switching to an OLED-protection
+arrangement for work, and so on. This lets me pick the layout I want from the top
+bar (or have it applied automatically) instead of clicking through the display
+settings each time.
+
+It also fixed a bug I had where my layout was lost after every restart because of
+my docking station — applying layouts with mutter's `PERSISTENT` method makes the
+configuration survive reboots.
+
+If you need to adapt it for your own setup, feel free to use it — just mention me.
+
 ## Components
 
 | Path in repo | Installed to | What it is |
