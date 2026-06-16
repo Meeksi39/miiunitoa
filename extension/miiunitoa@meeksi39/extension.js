@@ -89,33 +89,35 @@ function layoutSummary(name) {
     }
 }
 
-// Small text-entry dialog for "Save current layout…".
-const SaveDialog = GObject.registerClass(
-class SaveDialog extends ModalDialog.ModalDialog {
-    _init(onSave) {
+// Small text-entry dialog used for "Save current layout…" and "Rename…".
+const NameDialog = GObject.registerClass(
+class NameDialog extends ModalDialog.ModalDialog {
+    _init(onSubmit, {label = 'Name for this layout:', initial = '', button = 'Save'} = {}) {
         super._init({destroyOnClose: true});
-        this._onSave = onSave;
+        this._onSubmit = onSubmit;
 
         const box = new St.BoxLayout({vertical: true, style_class: 'message-dialog-content'});
-        box.add_child(new St.Label({text: 'Name for this layout:'}));
-        this._entry = new St.Entry({can_focus: true, x_expand: true});
-        this._entry.clutter_text.connect('activate', () => this._save());
+        box.add_child(new St.Label({text: label}));
+        this._entry = new St.Entry({can_focus: true, x_expand: true, text: initial});
+        this._entry.clutter_text.connect('activate', () => this._submit());
         box.add_child(this._entry);
         this.contentLayout.add_child(box);
 
         this.addButton({label: 'Cancel', key: Clutter.KEY_Escape,
             action: () => this.close()});
-        this.addButton({label: 'Save', default: true, action: () => this._save()});
+        this.addButton({label: button, default: true, action: () => this._submit()});
 
         this.setInitialKeyFocus(this._entry.clutter_text);
+        if (initial)
+            this._entry.clutter_text.set_selection(0, initial.length);
     }
 
-    _save() {
+    _submit() {
         const name = this._entry.get_text().trim();
         if (!name)
             return;
         this.close();
-        this._onSave(name);
+        this._onSubmit(name);
     }
 });
 
@@ -207,6 +209,10 @@ class Indicator extends PanelMenu.Button {
         });
         sub.menu.addMenuItem(setDefault);
 
+        const rename = new PopupMenu.PopupMenuItem('Rename…');
+        rename.connect('activate', () => this._renameLayout(name));
+        sub.menu.addMenuItem(rename);
+
         const del = new PopupMenu.PopupMenuItem('Delete');
         del.connect('activate', () => {
             runScript(['delete', name], () => this._rebuild());
@@ -233,12 +239,26 @@ class Indicator extends PanelMenu.Button {
     }
 
     _saveCurrent() {
-        const dialog = new SaveDialog((name) => {
+        const dialog = new NameDialog((name) => {
             runScript(['save', name], (ok, _out, stderr) => {
                 if (!ok)
                     Main.notify('ミーウニトア', `Could not save "${name}".\n${stderr}`);
             });
         });
+        dialog.open();
+    }
+
+    _renameLayout(name) {
+        const dialog = new NameDialog((newName) => {
+            if (newName === name)
+                return;
+            runScript(['rename', name, newName], (ok, _out, stderr) => {
+                if (ok)
+                    this._rebuild();
+                else
+                    Main.notify('ミーウニトア', `Could not rename "${name}".\n${stderr}`);
+            });
+        }, {label: `Rename "${name}" to:`, initial: name, button: 'Rename'});
         dialog.open();
     }
 });
