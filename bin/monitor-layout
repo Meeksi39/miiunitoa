@@ -5,11 +5,15 @@ Talks to org.gnome.Mutter.DisplayConfig over D-Bus, so it works live on
 GNOME Wayland where xrandr / wlr-randr / autorandr do not.
 
 Usage:
-  monitor-layout save <name>     Save the current monitor layout under <name>
-  monitor-layout apply <name>    Switch to the saved layout <name>
-  monitor-layout list            List saved layouts
-  monitor-layout current         Show the current layout (as it would be saved)
-  monitor-layout delete <name>   Delete a saved layout
+  monitor-layout save <name>          Save the current monitor layout under <name>
+  monitor-layout apply <name>         Switch to the saved layout <name>
+  monitor-layout list                 List saved layouts
+  monitor-layout current              Show the current layout (as it would be saved)
+  monitor-layout rename <old> <new>   Rename a saved layout
+  monitor-layout delete <name>        Delete a saved layout
+  monitor-layout active               Print the saved layout matching the current config
+  monitor-layout match [--apply] [--prefer <name>]
+                                      Find/apply the saved layout matching connected monitors
 """
 
 import json
@@ -65,6 +69,20 @@ def current_mode_by_connector(monitors):
     return out
 
 
+def connectors_current(monitors):
+    """Set of connectors currently connected (from GetCurrentState)."""
+    return {spec[0] for spec, _modes, _mprops in monitors}
+
+
+def connectors_of(profile):
+    """Set of connectors a saved layout references."""
+    return {
+        m["connector"]
+        for lm in profile["logical_monitors"]
+        for m in lm["monitors"]
+    }
+
+
 def capture():
     """Return a serializable description of the current layout."""
     p = proxy()
@@ -116,13 +134,16 @@ def cmd_save(name):
     print(describe(profile))
 
 
-def cmd_apply(name):
+def load_profile(name):
     path = path_for(name)
     if not os.path.exists(path):
         sys.exit(f"No saved layout named '{name}'. Try: monitor-layout list")
     with open(path) as f:
-        profile = json.load(f)
+        return json.load(f)
 
+
+def apply_profile(name, profile):
+    """Apply a loaded layout via ApplyMonitorsConfig (PERSISTENT)."""
     p = proxy()
     serial, _monitors, _lms, _props = get_current_state(p)
 
@@ -143,14 +164,21 @@ def cmd_apply(name):
     except GLib.Error as e:
         sys.exit(f"Failed to apply '{name}': {e.message}\n"
                  f"(The saved connectors/modes may not match what's plugged in now.)")
+
+
+def cmd_apply(name):
+    apply_profile(name, load_profile(name))
     print(f"Applied layout '{name}'.")
 
 
-def cmd_list():
+def saved_names():
     if not os.path.isdir(PROFILE_DIR):
-        print("No saved layouts yet.")
-        return
-    names = sorted(f[:-5] for f in os.listdir(PROFILE_DIR) if f.endswith(".json"))
+        return []
+    return sorted(f[:-5] for f in os.listdir(PROFILE_DIR) if f.endswith(".json"))
+
+
+def cmd_list():
+    names = saved_names()
     if not names:
         print("No saved layouts yet.")
         return
@@ -172,12 +200,83 @@ def cmd_delete(name):
     print(f"Deleted layout '{name}'.")
 
 
+def cmd_rename(old, new):
+    if not os.path.exists(path_for(old)):
+        sys.exit(f"No saved layout named '{old}'.")
+    if os.path.exists(path_for(new)):
+        sys.exit(f"A layout named '{new}' already exists.")
+    os.rename(path_for(old), path_for(new))
+    print(f"Renamed layout '{old}' -> '{new}'.")
+
+
+def cmd_active():
+    """Print the saved layout whose config equals the current one (else nothing)."""
+    # Round-trip through JSON so the captured config compares equal to what was
+    # saved (normalizes tuples -> lists and int/float types).
+    current = json.loads(json.dumps(capture()))
+    for name in saved_names():
+        if load_profile(name) == current:
+            print(name)
+            return
+
+
+def matching_layouts(connected):
+    """Saved layouts usable with `connected` connectors (all theirs present),
+    largest first. A layout that disables some connected monitors still matches;
+    one that needs an absent monitor does not."""
+    cands = [
+        (n, connectors_of(load_profile(n)))
+        for n in saved_names()
+    ]
+    cands = [(n, c) for n, c in cands if c and c <= connected]
+    cands.sort(key=lambda nc: (-len(nc[1]), nc[0]))
+    return [n for n, _ in cands]
+
+
+def cmd_match(apply, prefer):
+    """Find/apply the saved layout matching the connected monitors."""
+    p = proxy()
+    _serial, monitors, _lms, _props = get_current_state(p)
+    connected = connectors_current(monitors)
+    matches = matching_layouts(connected)
+
+    if not apply:
+        for name in matches:
+            print(name)
+        return
+
+    if not matches:
+        sys.exit("No saved layout matches the connected monitors.")
+    if prefer and prefer in matches:
+        chosen = prefer
+    else:
+        # Prefer the layout that uses the most of the connected monitors;
+        # only ambiguous if several tie for that maximum.
+        top = [n for n in matches
+               if len(connectors_of(load_profile(n))) ==
+               len(connectors_of(load_profile(matches[0])))]
+        if len(top) > 1:
+            sys.exit(f"Ambiguous: several layouts match ({', '.join(top)}). "
+                     f"Disambiguate with --prefer <name>.")
+        chosen = top[0]
+
+    profile = load_profile(chosen)
+    # Skip the apply if it would be a no-op. Applying re-emits MonitorsChanged,
+    # so re-applying the already-active layout would loop endlessly on hotplug.
+    if profile == json.loads(json.dumps(capture())):
+        print(f"Layout '{chosen}' is already active.")
+        return
+    apply_profile(chosen, profile)
+    print(f"Applied layout '{chosen}'.")
+
+
 def main(argv):
     if len(argv) < 2:
         print(__doc__)
         return
     cmd = argv[1]
-    arg = argv[2] if len(argv) > 2 else None
+    rest = argv[2:]
+    arg = rest[0] if rest else None
     if cmd == "save" and arg:
         cmd_save(arg)
     elif cmd == "apply" and arg:
@@ -186,8 +285,20 @@ def main(argv):
         cmd_list()
     elif cmd == "current":
         cmd_current()
+    elif cmd == "rename" and len(rest) == 2:
+        cmd_rename(rest[0], rest[1])
     elif cmd == "delete" and arg:
         cmd_delete(arg)
+    elif cmd == "active":
+        cmd_active()
+    elif cmd == "match":
+        apply = "--apply" in rest
+        prefer = None
+        if "--prefer" in rest:
+            i = rest.index("--prefer")
+            if i + 1 < len(rest):
+                prefer = rest[i + 1]
+        cmd_match(apply, prefer)
     else:
         print(__doc__)
         sys.exit(1)
