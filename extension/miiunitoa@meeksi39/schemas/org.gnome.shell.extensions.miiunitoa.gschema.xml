@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.miiunitoa"
+          path="/org/gnome/shell/extensions/miiunitoa/">
+    <key name="auto-switch" type="b">
+      <default>true</default>
+      <summary>Auto-switch on hotplug</summary>
+      <description>
+        When monitors are connected or disconnected, automatically apply the
+        saved layout that matches the now-connected monitors.
+      </description>
+    </key>
+    <key name="default-layout" type="s">
+      <default>''</default>
+      <summary>Default layout</summary>
+      <description>
+        Name of the layout to prefer when several saved layouts match the
+        connected monitors during auto-switch. Set via "Set as default".
+      </description>
+    </key>
+    <key name="cycle-layouts" type="as">
+      <default><![CDATA[['<Super>p']]]></default>
+      <summary>Cycle to the next saved layout</summary>
+      <description>
+        Keyboard shortcut that applies the next saved layout in order.
+      </description>
+    </key>
+  </schema>
+</schemalist>
