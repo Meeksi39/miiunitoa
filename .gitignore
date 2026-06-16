@@ -1,0 +1,12 @@
+# User data — saved layouts live in ~/.config/monitor-layouts, never in the repo
+*.json
+!extension/**/metadata.json
+
+# Install backups created by install.sh
+*.bak.*
+
+# Editor / OS noise
+*.swp
+*~
+.DS_Store
+__pycache__/

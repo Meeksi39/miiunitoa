@@ -1,0 +1,7 @@
+{
+  "uuid": "miiunitoa@meeksi39",
+  "name": "ミーウニトア",
+  "description": "Switch between saved monitor layouts from the top bar. Reads layouts saved with the 'monitor-layout' / 'ml' command (~/.config/monitor-layouts).",
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "version": 1
+}

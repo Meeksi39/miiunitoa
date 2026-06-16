@@ -1,0 +1,197 @@
+#!/usr/bin/env python3
+"""monitor-layout — save and switch GNOME (Wayland/mutter) monitor layouts.
+
+Talks to org.gnome.Mutter.DisplayConfig over D-Bus, so it works live on
+GNOME Wayland where xrandr / wlr-randr / autorandr do not.
+
+Usage:
+  monitor-layout save <name>     Save the current monitor layout under <name>
+  monitor-layout apply <name>    Switch to the saved layout <name>
+  monitor-layout list            List saved layouts
+  monitor-layout current         Show the current layout (as it would be saved)
+  monitor-layout delete <name>   Delete a saved layout
+"""
+
+import json
+import os
+import sys
+
+import gi
+gi.require_version("Gio", "2.0")
+from gi.repository import Gio, GLib  # noqa: E402
+
+PROFILE_DIR = os.path.expanduser("~/.config/monitor-layouts")
+
+# ApplyMonitorsConfig methods
+METHOD_VERIFY = 0
+METHOD_TEMPORARY = 1
+METHOD_PERSISTENT = 2
+
+TRANSFORMS = {
+    0: "normal", 1: "90", 2: "180", 3: "270",
+    4: "flipped", 5: "flipped-90", 6: "flipped-180", 7: "flipped-270",
+}
+
+
+def proxy():
+    return Gio.DBusProxy.new_for_bus_sync(
+        Gio.BusType.SESSION, Gio.DBusProxyFlags.NONE, None,
+        "org.gnome.Mutter.DisplayConfig",
+        "/org/gnome/Mutter/DisplayConfig",
+        "org.gnome.Mutter.DisplayConfig", None,
+    )
+
+
+def get_current_state(p):
+    res = p.call_sync("GetCurrentState", None, Gio.DBusCallFlags.NONE, -1, None)
+    serial, monitors, logical_monitors, props = res.unpack()
+    return serial, monitors, logical_monitors, props
+
+
+def current_mode_by_connector(monitors):
+    """Map connector -> current mode id (the active resolution/refresh)."""
+    out = {}
+    for spec, modes, _mprops in monitors:
+        connector = spec[0]
+        chosen = None
+        for mode in modes:
+            mode_id, w, h, refresh, pref_scale, scales, mprops = mode
+            if mprops.get("is-current"):
+                chosen = mode_id
+                break
+        if chosen is None and modes:
+            chosen = modes[0][0]  # fall back to first/preferred
+        out[connector] = chosen
+    return out
+
+
+def capture():
+    """Return a serializable description of the current layout."""
+    p = proxy()
+    _serial, monitors, logical_monitors, _props = get_current_state(p)
+    mode_for = current_mode_by_connector(monitors)
+
+    lms = []
+    for x, y, scale, transform, primary, lm_monitors, _lprops in logical_monitors:
+        mons = []
+        for spec in lm_monitors:
+            connector = spec[0]
+            mons.append({"connector": connector, "mode_id": mode_for.get(connector)})
+        lms.append({
+            "x": x, "y": y, "scale": scale,
+            "transform": transform, "primary": primary,
+            "monitors": mons,
+        })
+    return {"logical_monitors": lms}
+
+
+def describe(profile):
+    lines = []
+    for lm in profile["logical_monitors"]:
+        conns = ", ".join(
+            f"{m['connector']}@{m['mode_id']}" for m in lm["monitors"]
+        )
+        flags = []
+        if lm["primary"]:
+            flags.append("primary")
+        if lm["transform"]:
+            flags.append(f"rot:{TRANSFORMS.get(lm['transform'], lm['transform'])}")
+        flag = f" [{', '.join(flags)}]" if flags else ""
+        lines.append(
+            f"  ({lm['x']},{lm['y']}) scale={lm['scale']:g} {conns}{flag}"
+        )
+    return "\n".join(lines)
+
+
+def path_for(name):
+    return os.path.join(PROFILE_DIR, f"{name}.json")
+
+
+def cmd_save(name):
+    profile = capture()
+    os.makedirs(PROFILE_DIR, exist_ok=True)
+    with open(path_for(name), "w") as f:
+        json.dump(profile, f, indent=2)
+    print(f"Saved layout '{name}':")
+    print(describe(profile))
+
+
+def cmd_apply(name):
+    path = path_for(name)
+    if not os.path.exists(path):
+        sys.exit(f"No saved layout named '{name}'. Try: monitor-layout list")
+    with open(path) as f:
+        profile = json.load(f)
+
+    p = proxy()
+    serial, _monitors, _lms, _props = get_current_state(p)
+
+    logical_monitors = []
+    for lm in profile["logical_monitors"]:
+        mons = [(m["connector"], m["mode_id"], {}) for m in lm["monitors"]]
+        logical_monitors.append(
+            (lm["x"], lm["y"], float(lm["scale"]),
+             lm["transform"], lm["primary"], mons)
+        )
+
+    args = GLib.Variant(
+        "(uua(iiduba(ssa{sv}))a{sv})",
+        (serial, METHOD_PERSISTENT, logical_monitors, {}),
+    )
+    try:
+        p.call_sync("ApplyMonitorsConfig", args, Gio.DBusCallFlags.NONE, -1, None)
+    except GLib.Error as e:
+        sys.exit(f"Failed to apply '{name}': {e.message}\n"
+                 f"(The saved connectors/modes may not match what's plugged in now.)")
+    print(f"Applied layout '{name}'.")
+
+
+def cmd_list():
+    if not os.path.isdir(PROFILE_DIR):
+        print("No saved layouts yet.")
+        return
+    names = sorted(f[:-5] for f in os.listdir(PROFILE_DIR) if f.endswith(".json"))
+    if not names:
+        print("No saved layouts yet.")
+        return
+    for name in names:
+        print(f"* {name}")
+        with open(path_for(name)) as f:
+            print(describe(json.load(f)))
+
+
+def cmd_current():
+    print(describe(capture()))
+
+
+def cmd_delete(name):
+    path = path_for(name)
+    if not os.path.exists(path):
+        sys.exit(f"No saved layout named '{name}'.")
+    os.remove(path)
+    print(f"Deleted layout '{name}'.")
+
+
+def main(argv):
+    if len(argv) < 2:
+        print(__doc__)
+        return
+    cmd = argv[1]
+    arg = argv[2] if len(argv) > 2 else None
+    if cmd == "save" and arg:
+        cmd_save(arg)
+    elif cmd == "apply" and arg:
+        cmd_apply(arg)
+    elif cmd == "list":
+        cmd_list()
+    elif cmd == "current":
+        cmd_current()
+    elif cmd == "delete" and arg:
+        cmd_delete(arg)
+    else:
+        print(__doc__)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main(sys.argv)
