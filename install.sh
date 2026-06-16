@@ -79,6 +79,13 @@ echo "  linked  $ALIAS_DST -> $BIN_DST"
 # GNOME Shell extension
 link_or_copy "$EXT_SRC" "$EXT_DST"
 
+# Compile the extension's GSettings schema so GNOME can load its settings
+# (auto-switch toggle, default layout, cycle keybinding).
+if command -v glib-compile-schemas >/dev/null && [[ -d "$EXT_DST/schemas" ]]; then
+  glib-compile-schemas "$EXT_DST/schemas"
+  echo "  compiled $EXT_DST/schemas/gschemas.compiled"
+fi
+
 echo
 echo "Done."
 echo "Make sure ~/.local/bin is on your PATH, then:"
