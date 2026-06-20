@@ -20,9 +20,15 @@ import json
 import os
 import sys
 
-import gi
-gi.require_version("Gio", "2.0")
-from gi.repository import Gio, GLib  # noqa: E402
+# PyGObject is only needed for the live D-Bus calls. Importing it lazily keeps
+# the pure layout logic (ordering, matching, duplicate detection) importable —
+# and therefore unit-testable — on machines without GNOME / PyGObject.
+try:
+    import gi
+    gi.require_version("Gio", "2.0")
+    from gi.repository import Gio, GLib
+except (ImportError, ValueError):  # pragma: no cover - exercised only off-GNOME
+    Gio = GLib = None
 
 PROFILE_DIR = os.path.expanduser("~/.config/monitor-layouts")
 
@@ -83,10 +89,32 @@ def connectors_of(profile):
     }
 
 
-def capture():
-    """Return a serializable description of the current layout."""
-    p = proxy()
-    _serial, monitors, logical_monitors, _props = get_current_state(p)
+def canonical_lms(lms):
+    """Order logical monitors deterministically: primary first, then top-to-bottom,
+    left-to-right. Mutter assigns monitor index 0 to the first entry, and a lot of
+    window-placement / fullscreen fallback logic targets monitor 0 — so the primary
+    must lead, otherwise fullscreen apps land on whatever happens to be first
+    (e.g. a rotated secondary screen). Sorting also makes two layouts that differ
+    only in capture order compare equal."""
+    return sorted(
+        lms,
+        key=lambda lm: (not lm.get("primary"), lm["y"], lm["x"]),
+    )
+
+
+def normalized(profile):
+    """Profile reduced to a canonical, comparable form: JSON round-trip (so tuples
+    vs lists and int vs float don't matter) plus canonical monitor ordering. Used
+    for equality checks so an already-active layout isn't needlessly re-applied —
+    re-applying re-emits MonitorsChanged and would loop on hotplug."""
+    p = json.loads(json.dumps(profile))
+    p["logical_monitors"] = canonical_lms(p.get("logical_monitors", []))
+    return p
+
+
+def capture_from(monitors, logical_monitors):
+    """Pure transform of a GetCurrentState reply into a serializable layout.
+    Kept free of D-Bus so it can be unit-tested with recorded fixtures."""
     mode_for = current_mode_by_connector(monitors)
 
     lms = []
@@ -100,7 +128,41 @@ def capture():
             "transform": transform, "primary": primary,
             "monitors": mons,
         })
-    return {"logical_monitors": lms}
+    return {"logical_monitors": canonical_lms(lms)}
+
+
+def identity_groups(monitors):
+    """Map each monitor identity (vendor, product, serial) -> [connectors].
+    A GetCurrentState monitor is (spec, modes, props) with
+    spec = (connector, vendor, product, serial)."""
+    groups = {}
+    for spec, _modes, _mprops in monitors:
+        connector, vendor, product, serial = spec
+        groups.setdefault((vendor, product, serial), []).append(connector)
+    return groups
+
+
+def duplicate_identity_warning(monitors):
+    """Warn when monitors share an identical EDID identity. GNOME/mutter identify
+    monitors by vendor+product+serial, so identical ones (e.g. cheap panels that
+    all report serial 0x00000000) can only be told apart by connector name — which
+    is not stable across reboots/hotplug. Returns a message, or None if all unique."""
+    dups = {ident: conns for ident, conns in identity_groups(monitors).items()
+            if len(conns) > 1}
+    if not dups:
+        return None
+    lines = ["Warning: these monitors are indistinguishable by EDID, so layouts can",
+             "only be matched by connector name (which may change across reboots):"]
+    for (vendor, product, serial), conns in sorted(dups.items()):
+        lines.append(f"  {vendor} {product} serial={serial}: {', '.join(sorted(conns))}")
+    return "\n".join(lines)
+
+
+def capture():
+    """Return a serializable description of the current layout."""
+    p = proxy()
+    _serial, monitors, logical_monitors, _props = get_current_state(p)
+    return capture_from(monitors, logical_monitors)
 
 
 def describe(profile):
@@ -126,12 +188,17 @@ def path_for(name):
 
 
 def cmd_save(name):
-    profile = capture()
+    p = proxy()
+    _serial, monitors, logical_monitors, _props = get_current_state(p)
+    profile = capture_from(monitors, logical_monitors)
     os.makedirs(PROFILE_DIR, exist_ok=True)
     with open(path_for(name), "w") as f:
         json.dump(profile, f, indent=2)
     print(f"Saved layout '{name}':")
     print(describe(profile))
+    warning = duplicate_identity_warning(monitors)
+    if warning:
+        print(warning, file=sys.stderr)
 
 
 def load_profile(name):
@@ -148,7 +215,7 @@ def apply_profile(name, profile):
     serial, _monitors, _lms, _props = get_current_state(p)
 
     logical_monitors = []
-    for lm in profile["logical_monitors"]:
+    for lm in canonical_lms(profile["logical_monitors"]):
         mons = [(m["connector"], m["mode_id"], {}) for m in lm["monitors"]]
         logical_monitors.append(
             (lm["x"], lm["y"], float(lm["scale"]),
@@ -211,11 +278,11 @@ def cmd_rename(old, new):
 
 def cmd_active():
     """Print the saved layout whose config equals the current one (else nothing)."""
-    # Round-trip through JSON so the captured config compares equal to what was
-    # saved (normalizes tuples -> lists and int/float types).
-    current = json.loads(json.dumps(capture()))
+    # normalized() handles JSON tuple/float quirks *and* monitor ordering, so a
+    # layout saved before primary-first ordering still matches its live config.
+    current = normalized(capture())
     for name in saved_names():
-        if load_profile(name) == current:
+        if normalized(load_profile(name)) == current:
             print(name)
             return
 
@@ -263,7 +330,7 @@ def cmd_match(apply, prefer):
     profile = load_profile(chosen)
     # Skip the apply if it would be a no-op. Applying re-emits MonitorsChanged,
     # so re-applying the already-active layout would loop endlessly on hotplug.
-    if profile == json.loads(json.dumps(capture())):
+    if normalized(profile) == normalized(capture()):
         print(f"Layout '{chosen}' is already active.")
         return
     apply_profile(chosen, profile)

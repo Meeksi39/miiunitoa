@@ -168,6 +168,11 @@ the `%s` / `%d` placeholders intact.
   `DP-4`) plus its active `mode_id` (e.g. `1920x1080@200.000`).
 - **Apply** reads the saved JSON and calls `ApplyMonitorsConfig` with method
   `PERSISTENT` (2), so the change survives reboots.
+- Both save and apply put your **primary monitor first** (then top-to-bottom,
+  left-to-right). Mutter treats the first logical monitor as index 0, and lots
+  of window placement falls back to it — so if a rotated side screen ends up
+  first, fullscreen apps love to jump onto it. Leading with the primary keeps
+  them where you expect.
 
 ### Layout file format
 
@@ -200,6 +205,15 @@ variants.
   (`gnome-extensions list --enabled`) and that you logged out/in on Wayland.
 - **`ml: command not found`** — `~/.local/bin` isn't on your `PATH`.
 - **No layouts in the menu** — you haven't saved any yet; run `ml save <name>`.
+- **Fullscreen apps keep jumping to the wrong screen / a layout won't behave** —
+  if `ml save` prints a *"monitors are indistinguishable by EDID"* warning, two
+  or more of your panels report the same vendor/product/serial (common with
+  cheap monitors that leave the serial at `0x00000000`). GNOME can only tell
+  them apart by connector name, which can shuffle across reboots, so a saved
+  layout may land on the wrong physical screen. The durable fix is to give one
+  of the colliding panels a unique EDID via a per-connector kernel override
+  (`drm_kms_helper.edid_firmware=<connector>:edid/<file>.bin`) so it reports a
+  distinct serial.
 
 ## Development
 
@@ -209,4 +223,11 @@ Shell (log out/in on Wayland). Watch extension logs with:
 
 ```sh
 journalctl -f -o cat /usr/bin/gnome-shell
+```
+
+The pure layout logic (ordering, matching, duplicate-EDID detection) has unit
+tests that don't need GNOME or PyGObject — run them with:
+
+```sh
+python3 -m unittest discover -s tests
 ```
