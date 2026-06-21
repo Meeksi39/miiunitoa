@@ -173,6 +173,14 @@ the `%s` / `%d` placeholders intact.
   of window placement falls back to it — so if a rotated side screen ends up
   first, fullscreen apps love to jump onto it. Leading with the primary keeps
   them where you expect.
+- **Save** also records each monitor's EDID identity (`vendor`, `product`,
+  `serial`). **`match`** uses it to *remap* a layout onto renamed connectors: if
+  a DisplayPort MST dock brings your monitors back as `DP-6/7/8` instead of the
+  `DP-3/4/5` you saved, `match` recognises the same panels by identity and
+  applies the layout to the connectors that are actually there. For panels that
+  share an identity (identical monitors), it pairs them by sorted connector
+  order, preserving the daisy-chain order. Remapping needs identities on file,
+  so re-save any layout made before this feature once.
 
 ### Layout file format
 
@@ -185,7 +193,10 @@ the `%s` / `%d` placeholders intact.
       "transform": 0,
       "primary": true,
       "monitors": [
-        { "connector": "DP-4", "mode_id": "1920x1080@200.000" }
+        {
+          "connector": "DP-4", "mode_id": "1920x1080@200.000",
+          "vendor": "XMI", "product": "Mi Monitor", "serial": "0x00000000"
+        }
       ]
     }
   ]
@@ -193,7 +204,9 @@ the `%s` / `%d` placeholders intact.
 ```
 
 `transform` values: `0` normal, `1` 90°, `2` 180°, `3` 270°, `4–7` the flipped
-variants.
+variants. The `vendor`/`product`/`serial` fields are the monitor's EDID identity,
+recorded so `match` can remap the layout onto renamed connectors; they're
+optional, and layouts saved without them still apply by connector name.
 
 ## Troubleshooting
 
@@ -205,15 +218,20 @@ variants.
   (`gnome-extensions list --enabled`) and that you logged out/in on Wayland.
 - **`ml: command not found`** — `~/.local/bin` isn't on your `PATH`.
 - **No layouts in the menu** — you haven't saved any yet; run `ml save <name>`.
-- **Fullscreen apps keep jumping to the wrong screen / a layout won't behave** —
-  if `ml save` prints a *"monitors are indistinguishable by EDID"* warning, two
-  or more of your panels report the same vendor/product/serial (common with
-  cheap monitors that leave the serial at `0x00000000`). GNOME can only tell
-  them apart by connector name, which can shuffle across reboots, so a saved
-  layout may land on the wrong physical screen. The durable fix is to give one
-  of the colliding panels a unique EDID via a per-connector kernel override
-  (`drm_kms_helper.edid_firmware=<connector>:edid/<file>.bin`) so it reports a
-  distinct serial.
+- **A saved layout stops applying after docking/undocking** — a DisplayPort MST
+  dock renames connectors (`DP-3/4/5` → `DP-6/7/8`). `match` handles this by
+  remapping the layout onto the present connectors by EDID identity, so just run
+  `ml match --apply` (the hotplug auto-switch does this for you). It only works
+  for layouts saved *with* identities, so re-save once if a layout predates that.
+- **Fullscreen apps keep jumping to the wrong screen / monitors are
+  interchangeable** — if `ml save` prints a *"monitors are indistinguishable by
+  EDID"* warning, two or more panels report the same vendor/product/serial
+  (common with cheap monitors that leave the serial at `0x00000000`). `match`'s
+  identity remap papers over connector renames, but truly telling identical
+  panels apart needs a unique EDID. On the open-source drivers (i915, amdgpu,
+  nouveau) you can force one per connector with the kernel `drm.edid_firmware`
+  override; **note this does *not* work on the NVIDIA proprietary driver**, which
+  ignores the DRM EDID-override path entirely.
 
 ## Development
 
