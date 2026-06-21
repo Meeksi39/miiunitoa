@@ -17,3 +17,7 @@ extension/**/locale/
 *~
 .DS_Store
 __pycache__/
+
+# Local-only assistant notes — never publish
+CLAUDE.md
+COMMIT.md
