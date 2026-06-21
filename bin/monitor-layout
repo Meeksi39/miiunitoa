@@ -14,6 +14,7 @@ Usage:
   monitor-layout active               Print the saved layout matching the current config
   monitor-layout match [--apply] [--prefer <name>]
                                       Find/apply the saved layout matching connected monitors
+                                      (remaps onto renamed connectors by EDID identity)
 """
 
 import json
@@ -109,6 +110,13 @@ def normalized(profile):
     re-applying re-emits MonitorsChanged and would loop on hotplug."""
     p = json.loads(json.dumps(profile))
     p["logical_monitors"] = canonical_lms(p.get("logical_monitors", []))
+    # EDID identity is advisory metadata for remapping, not part of a layout's
+    # identity — drop it so a layout saved before this field existed still
+    # compares equal to a fresh capture (otherwise `active`/no-op checks break).
+    for lm in p["logical_monitors"]:
+        for m in lm.get("monitors", []):
+            for key in ("vendor", "product", "serial"):
+                m.pop(key, None)
     return p
 
 
@@ -122,7 +130,13 @@ def capture_from(monitors, logical_monitors):
         mons = []
         for spec in lm_monitors:
             connector = spec[0]
-            mons.append({"connector": connector, "mode_id": mode_for.get(connector)})
+            mon = {"connector": connector, "mode_id": mode_for.get(connector)}
+            # Record the EDID identity (vendor, product, serial) so `match` can
+            # remap this layout onto renamed connectors later — e.g. a DisplayPort
+            # MST dock that reshuffles DP-N names across dock/undock.
+            if len(spec) >= 4:
+                mon["vendor"], mon["product"], mon["serial"] = spec[1], spec[2], spec[3]
+            mons.append(mon)
         lms.append({
             "x": x, "y": y, "scale": scale,
             "transform": transform, "primary": primary,
@@ -287,52 +301,124 @@ def cmd_active():
             return
 
 
-def matching_layouts(connected):
-    """Saved layouts usable with `connected` connectors (all theirs present),
-    largest first. A layout that disables some connected monitors still matches;
-    one that needs an absent monitor does not."""
-    cands = [
-        (n, connectors_of(load_profile(n)))
-        for n in saved_names()
-    ]
-    cands = [(n, c) for n, c in cands if c and c <= connected]
-    cands.sort(key=lambda nc: (-len(nc[1]), nc[0]))
-    return [n for n, _ in cands]
+def identity_of_entry(m):
+    """EDID identity stored on a saved monitor entry, or None for layouts saved
+    before identities were recorded (those can only be matched by connector)."""
+    if all(k in m for k in ("vendor", "product", "serial")):
+        return (m["vendor"], m["product"], m["serial"])
+    return None
+
+
+def remap_connectors(profile, monitors):
+    """If a layout's connectors aren't all present (e.g. an MST dock renamed
+    DP-3/4/5 to DP-6/7/8), try to remap it onto the connected monitors by EDID
+    identity — and, within a group of identical monitors, by sorted connector
+    order so the physical daisy-chain order is preserved. Returns a remapped
+    copy, or None if it can't be covered (a pre-identity layout, or too few
+    connected monitors of some identity)."""
+    present = {}
+    for spec, _modes, _mprops in monitors:
+        connector, vendor, product, serial = spec
+        present.setdefault((vendor, product, serial), []).append(connector)
+    for conns in present.values():
+        conns.sort()
+
+    required = {}
+    for lm in profile["logical_monitors"]:
+        for m in lm["monitors"]:
+            ident = identity_of_entry(m)
+            if ident is None:
+                return None  # pre-identity layout — re-save it to enable remap
+            required.setdefault(ident, []).append(m["connector"])
+
+    mapping = {}
+    for ident, old_conns in required.items():
+        avail = present.get(ident, [])
+        if len(old_conns) > len(avail):
+            return None  # not enough connected monitors of this identity
+        for old, new in zip(sorted(old_conns), avail):
+            mapping[old] = new
+
+    remapped = json.loads(json.dumps(profile))
+    for lm in remapped["logical_monitors"]:
+        for m in lm["monitors"]:
+            m["connector"] = mapping[m["connector"]]
+    return remapped
+
+
+def applicable_profile(profile, monitors):
+    """The profile to apply for the connected monitors: the profile itself when
+    all its connectors are present, otherwise a connector-remapped copy, else
+    None."""
+    wanted = connectors_of(profile)
+    if wanted and wanted <= connectors_current(monitors):
+        return profile
+    return remap_connectors(profile, monitors)
+
+
+def usable_layouts(monitors):
+    """[(name, profile_to_apply)] for every saved layout applicable to the
+    connected monitors (exact connectors or remapped), largest first."""
+    out = []
+    for name in saved_names():
+        prof = load_profile(name)
+        applicable = applicable_profile(prof, monitors)
+        if applicable is not None:
+            out.append((name, applicable, len(connectors_of(prof))))
+    out.sort(key=lambda t: (-t[2], t[0]))
+    return [(n, ap) for n, ap, _ in out]
+
+
+def remap_summary(saved, applied):
+    """'DP-3->DP-6, DP-5->DP-8' describing which connectors a remap changed.
+    `saved` and `applied` share geometry, so canonical order lines them up."""
+    old = [m["connector"] for lm in canonical_lms(saved["logical_monitors"])
+           for m in lm["monitors"]]
+    new = [m["connector"] for lm in canonical_lms(applied["logical_monitors"])
+           for m in lm["monitors"]]
+    moves = [f"{o}->{n}" for o, n in zip(old, new) if o != n]
+    return ", ".join(moves)
 
 
 def cmd_match(apply, prefer):
     """Find/apply the saved layout matching the connected monitors."""
     p = proxy()
     _serial, monitors, _lms, _props = get_current_state(p)
-    connected = connectors_current(monitors)
-    matches = matching_layouts(connected)
+    usable = usable_layouts(monitors)
+    names = [n for n, _ in usable]
 
     if not apply:
-        for name in matches:
+        for name in names:
             print(name)
         return
 
-    if not matches:
+    if not usable:
         sys.exit("No saved layout matches the connected monitors.")
-    if prefer and prefer in matches:
-        chosen = prefer
+    if prefer and prefer in names:
+        chosen, profile = next((n, ap) for n, ap in usable if n == prefer)
     else:
-        # Prefer the layout that uses the most of the connected monitors;
-        # only ambiguous if several tie for that maximum.
-        top = [n for n in matches
-               if len(connectors_of(load_profile(n))) ==
-               len(connectors_of(load_profile(matches[0])))]
+        # Prefer the layout that uses the most monitors; ambiguous only on a tie.
+        top_size = len(connectors_of(load_profile(names[0])))
+        top = [n for n in names
+               if len(connectors_of(load_profile(n))) == top_size]
         if len(top) > 1:
             sys.exit(f"Ambiguous: several layouts match ({', '.join(top)}). "
                      f"Disambiguate with --prefer <name>.")
-        chosen = top[0]
+        chosen, profile = usable[0]
 
-    profile = load_profile(chosen)
     # Skip the apply if it would be a no-op. Applying re-emits MonitorsChanged,
     # so re-applying the already-active layout would loop endlessly on hotplug.
     if normalized(profile) == normalized(capture()):
         print(f"Layout '{chosen}' is already active.")
         return
+
+    # If we remapped onto renamed connectors, say so on stderr — the extension
+    # only surfaces stderr on failure, so it stays quiet, but a CLI user sees it.
+    saved = load_profile(chosen)
+    if connectors_of(saved) != connectors_of(profile):
+        print(f"Remapped '{chosen}' onto current connectors "
+              f"({remap_summary(saved, profile)}).", file=sys.stderr)
+
     apply_profile(chosen, profile)
     print(f"Applied layout '{chosen}'.")
 
